@@ -1,0 +1,37 @@
+{
+	admin off
+	auto_https off
+	servers {
+		# Railway's edge reaches containers from CGNAT space and its own public range;
+		# without all three, {client_ip} stops on a rotating Railway address.
+		trusted_proxies static 100.64.0.0/10 fd00::/8 152.233.0.0/17
+	}
+}
+
+# One public origin for the whole deployment, which is the shape erxes' own
+# production ingress uses: the React host app at "/" and the GraphQL gateway under
+# "/gateway". Keeping them on one host makes the auth-token cookie first-party and
+# removes the CORS surface between them entirely.
+:{$PORT:8080} {
+	# Probes this container only — never an upstream, which would deadlock a cold
+	# deploy while the gateway is still waiting for its plugins.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# The gateway mounts BullMQ's queue dashboard ahead of its auth middleware, so
+	# it is anonymous wherever it is reachable. Block it at the edge.
+	handle /gateway/bullmq-board* {
+		respond "forbidden" 403
+	}
+
+	redir /gateway /gateway/
+
+	handle_path /gateway/* {
+		reverse_proxy {$ERXES_GATEWAY_UPSTREAM:gateway.railway.internal:4000}
+	}
+
+	handle {
+		reverse_proxy {$ERXES_UI_UPSTREAM:core-ui.railway.internal:80}
+	}
+}

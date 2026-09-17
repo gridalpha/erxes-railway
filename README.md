@@ -56,6 +56,22 @@ erxes' own first-run owner form instead.
 | `ERXES_BOOTSTRAP_PORT` | no | loopback port used while seeding, default `3399` |
 | `UPLOAD_SERVICE_TYPE`, `AWS_*` | no | S3-compatible uploads; see the deployment profile |
 
+## The proxy service
+
+`proxy/` is the second image this repo builds — `caddy:2-alpine` plus a committed
+Caddyfile. It is the deployment's only public service and routes one origin:
+
+| Path | Upstream |
+|---|---|
+| `/healthz` | answered by Caddy itself, so the probe never depends on a peer |
+| `/gateway/bullmq-board*` | 403 — the gateway mounts BullMQ's dashboard ahead of its auth middleware |
+| `/gateway/*` | prefix stripped, then `gateway.railway.internal:4000` |
+| everything else | `core-ui.railway.internal:80` |
+
+Override `ERXES_GATEWAY_UPSTREAM` / `ERXES_UI_UPSTREAM` if those services are renamed.
+Point the service at it with `RAILWAY_DOCKERFILE_PATH=proxy/Dockerfile`; the build
+context is the repo root either way.
+
 ## Companion services
 
 | Service | Image | Notes |
